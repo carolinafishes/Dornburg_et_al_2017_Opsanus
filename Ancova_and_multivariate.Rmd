@@ -1,0 +1,210 @@
+---
+title: "Toadfish ETH"
+author: "Alex Dornburg"
+date: "August 18, 2017"
+output: html_document
+---
+
+###part 1
+## Toadfish Swimbladder Multiple Regression
+
+Now testing swimbladder mass against each organ in males (liver, brain, heart, gonads, and the sum of liver brain heart) with log10 eviscerated mass as a covariate
+
+```{r toads2}
+dyn.load('/Library/Java/JavaVirtualMachines/jdk1.8.0_40.jdk/Contents/Home/jre/lib/server/libjvm.dylib')
+library(rJava)
+library(xlsx)
+read.xlsx(file="Data_Here", sheetIndex=1)->toads
+males <- subset(toads, M.F=="m")
+###LIVER
+lm(log(males$swim.weight)~log(males$liver.weight)*log(males$weight.evi),data = males)->tta
+summary(tta)
+confint(tta,level=0.95)[4,]->liverconf
+coef(tta)[4]->livermean
+
+###BRAIN
+lm(log(males$swim.weight)~log(males$brain.weight)*log(males$weight.evi),data = males)->tta2
+summary(tta2)
+confint(tta2,level=0.95)[4,]->brainconf
+coef(tta2)[4]->brainmean
+
+###HEART
+lm(log(males$swim.weight)~log(males$heart.weight)*log(males$weight.evi),data = males)->tta4
+summary(tta4)
+confint(tta4,level=0.95)[4,]->heartconf
+coef(tta4)[4]->heartmean
+
+###GONADS
+lm(log(males$swim.weight)~log(males$gonad.weight)*log(males$weight.evi),data = males)->tta5
+summary(tta5)
+confint(tta5,level=0.95)[4,]->gonadconf
+coef(tta5)[4]->gonadmean
+
+###COMBINED LIVER BRAIN HEART
+males$heart.weight+males$brain.weight+males$liver.weight->combined_weights
+lm(log(males$swim.weight)~log(combined_weights)*log(males$weight.evi),data = toads)->tta6
+summary(tta6)
+confint(tta6,level=0.95)[4,]->combinedconf
+coef(tta6)[4]->combinedmean
+
+####
+#Make a plot of regression slopes
+c(liverconf[1],brainconf[1],heartconf[1],gonadconf[1],combinedconf[1])->lower
+c(liverconf[2],brainconf[2],heartconf[2],gonadconf[2],combinedconf[2])->upper
+c(livermean,brainmean,heartmean,gonadmean,combinedmean)->means
+c(1,2,3,4,5)->y
+
+plot(0,type='n',axes=FALSE,ann=FALSE)
+plot(means,y, new=FALSE, xlim=c(-0.2,0.2))
+arrows(means,y,lower,y, angle=90)
+arrows(means,y,upper,y,angle=90)
+abline(v=0)
+```
+
+## Now lets look at regression coefficients and do the above much more efficiently while we are at it
+```{r toads2_Regression_coeff}
+dyn.load('/Library/Java/JavaVirtualMachines/jdk1.8.0_40.jdk/Contents/Home/jre/lib/server/libjvm.dylib')
+library(rJava)
+library(xlsx)
+read.xlsx(file="Data_Here", sheetIndex=1)->toads
+males <- subset(toads, M.F=="m")
+log(males$swim.weight)->swim
+log(males$gonad.weight)->gonad
+log(males$liver.weight)->liver
+log(males$brain.weight)->brain
+log(males$heart.weight)->heart
+log(males$weight.evi)->body
+log(males$heart.weight+males$brain.weight+males$liver.weight)->combined
+
+cbind(swim,gonad,liver,brain,heart,body,combined)->data2
+as.data.frame(data2)->data2.0
+#function for plotting
+plot_coeffs <- function(mlr_model) {
+      coeffs <- coefficients(mlr_model)
+      mp <- barplot(coeffs, col="#3F97D0", xaxt='n', main="Regression Coefficients")
+      lablist <- names(coeffs)
+      text(mp, par("usr")[3], labels = lablist, srt = 45, adj = c(1.1,1.1), xpd = TRUE, cex=0.6)
+      return(coeffs)
+    }
+
+
+model <- lm(swim ~ .*body, data = data2.0)
+plot_coeffs(model)
+
+coeffs2 <- coefficients(model)
+mp <- barplot(c(coeffs2[2],coeffs2[3],coeffs2[4],coeffs2[5],coeffs2[7],coeffs2[8],coeffs2[9],coeffs2[10],coeffs2[11],coeffs2[12]),col="#3F97D0", xaxt='n', main="Regression Coefficients")
+      text(mp, par("usr")[3], labels = c("gonad","liver","brain","heart","combined","gonad:body","liver:body","    brain:body","heart:body","body:combined"), srt = 45, adj = c(1.1,1.1), xpd = TRUE, cex=0.6)
+
+summary(model)
+```
+
+### Option 2, The residual regressions and Kendall rank correlation
+
+```{r toads2_Residual_part}
+dyn.load('/Library/Java/JavaVirtualMachines/jdk1.8.0_40.jdk/Contents/Home/jre/lib/server/libjvm.dylib')
+library(rJava)
+library(xlsx)
+read.xlsx(file="Data_Here", sheetIndex=1)->toads
+males <- subset(toads, M.F=="m")
+
+log(males$swim.weight)->swim
+log(males$gonad.weight)->gonad
+log(males$liver.weight)->liver
+log(males$brain.weight)->brain
+log(males$heart.weight)->heart
+log(males$weight.evi)->body
+log(males$heart.weight+males$brain.weight+males$liver.weight)->combined
+
+##Datasets are different sizes so we need to make each pair here to omit missing data properly
+
+cbind(swim,gonad,body)->sg
+na.omit(sg)->sg
+cbind(swim,liver,body)->sl
+na.omit(sl)->sl
+cbind(swim,brain,body)->sb
+na.omit(sb)->sb
+cbind(swim,heart,body)->sh
+na.omit(sh)->sh
+cbind(swim,combined,body)->scombined
+na.omit(scombined)->scombined
+
+#get residuals for swimbladder for each dataset
+lm(sg[,1]~sg[,3])->swimg
+lm(sl[,1]~sl[,3])->swiml
+lm(sb[,1]~sb[,3])->swimb
+lm(sh[,1]~sh[,3])->swimh
+lm(scombined[,1]~scombined[,3])->swimcombined
+
+lm(sg[,2]~sg[,3])->gonad2
+lm(sl[,2]~sl[,3])->liver2
+lm(sb[,2]~sb[,3])->brain2
+lm(sh[,2]~sh[,3])->heart2
+lm(scombined[,2]~scombined[,3])->combined2
+
+#analyses and kendall's correlation
+lm(resid(swimg)~resid(gonad2))->swim_gonad
+cor.test(resid(swimg), resid(gonad2), method="kendall")
+summary(swim_gonad)
+
+lm(resid(swiml)~resid(liver2))->swim_liver2
+cor.test(resid(swiml), resid(liver2), method="kendall")
+summary(swim_liver2)
+
+lm(resid(swimb)~resid(brain2))->swim_brain2
+cor.test(resid(swimb), resid(brain2), method="kendall")
+summary(swim_brain2)
+
+lm(resid(swimh)~resid(heart2))->swim_heart2
+cor.test(resid(swimh), resid(heart2), method="kendall")
+summary(swim_heart2)
+
+lm(resid(swimcombined)~resid(combined2))->swim_combined2
+cor.test(resid(swimcombined), resid(combined2), method="kendall")
+summary(swim_combined2)
+
+```
+
+###Option 3  Multivariate regression
+
+
+```{r toads2_option3}
+dyn.load('/Library/Java/JavaVirtualMachines/jdk1.8.0_40.jdk/Contents/Home/jre/lib/server/libjvm.dylib')
+library(rJava)
+library(xlsx)
+library(Hmisc)
+read.xlsx(file="Data_Here", sheetIndex=1)->toads
+males <- subset(toads, M.F=="m")
+
+log(males$swim.weight)->swim
+log(males$gonad.weight)->gonad
+log(males$liver.weight)->liver
+log(males$brain.weight)->brain
+log(males$heart.weight)->heart
+log(males$weight.evi)->body
+log(males$heart.weight+males$brain.weight+males$liver.weight)->combined
+cbind(swim,gonad,liver,brain,heart,body,combined)->data2
+na.omit(data2)->noNAdata
+
+lm(cbind(noNAdata[,1],noNAdata[,2],noNAdata[,3],noNAdata[,4],noNAdata[,5],noNAdata[,7])~noNAdata[,6])->multi_var
+
+summary(multi_var)->sums
+resid(multi_var)->resids
+as.matrix(resids)->resids
+colnames(resids)<-c("swim","gonad","liver","brain","heart","combined")
+res2 <- cov(resids)
+res2
+cov2cor(res2)->correlations
+correlations
+
+rcorr(correlations)->coco
+
+library(corrplot)
+corrplot(correlations, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45)
+
+ #not significant correlations are blank 
+corrplot(coco$r, type="upper", order="hclust", p.mat = coco$P, sig.level = 0.01, insig = "blank")
+
+#P-value visual
+corrplot(coco$r, type="upper", order="hclust", p.mat = coco$P, sig.level = 0.01, insig = "p-value")
+
+```

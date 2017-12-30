@@ -1,0 +1,94 @@
+---
+title: "Toadfish_partial_correlation"
+author: "Alex Dornburg"
+date: "9/1/2017"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+dyn.load('/Library/Java/JavaVirtualMachines/jdk1.8.0_40.jdk/Contents/Home/jre/lib/server/libjvm.dylib')
+library(xlsx)
+library(ppcor)
+read.xlsx(file="Data_goes_here", sheetIndex=1)->toads
+library("Hmisc")
+
+CIcorr <- function(alpha, corr, s, n) {
+ # Computes a confidence interval for a population 
+ # (partial) Pearson correlation
+ # Arguments: 
+ #   alpha: alpha value for 1-alpha confidence
+ #   corr:  sample value of (partial) correlation 
+ #   s:     number of control variables
+ #   n:     sample size
+ # Returns:
+ #   confidence interval
+ z <- qnorm(1 - alpha/2)
+ se <- sqrt(1/((n - s - 3)))
+ zr <- log((1 + corr)/(1 - corr))/2
+ LL0 <- zr - z*se
+ UL0 <- zr + z*se
+ LL <- (exp(2*LL0) - 1)/(exp(2*LL0) + 1)
+ UL <- (exp(2*UL0) - 1)/(exp(2*UL0) + 1)
+ CI <- c(LL, UL)
+ return(CI)
+}
+
+
+males <- subset(toads, M.F=="m")
+
+###Get each data column
+log(males$weight.evi)->log_body
+log(males$swim.weight)->log_swim
+log(males$liver.weight)->log_liver
+log(males$brain.weight)->log_brain
+log(males$gonad.weight)->log_gonad
+log(males$heart)->log_heart
+
+na.omit(cbind(log_body,log_swim,log_liver))->liver
+#testing liver~swim
+pcor.test(liver[,3],liver[,2],liver[,1])->lcor
+lcor$estimate
+CIcorr(0.05,lcor$estimate,1,length(liver[,3]))->liverconf
+
+
+na.omit(cbind(log_body,log_swim,log_brain))->brain
+#testing brain~swim
+pcor.test(brain[,3],brain[,2],brain[,1])->bcor
+CIcorr(0.05,bcor$estimate,1,length(brain[,3]))->brainconf
+
+
+na.omit(cbind(log_body,log_swim,log_gonad))->gonad
+#testing gonad~swim
+pcor.test(gonad[,3],gonad[,2],gonad[,1])->gcor
+CIcorr(0.05,gcor$estimate,1,length(gonad[,3]))->gonadconf
+
+
+na.omit(cbind(log_body,log_swim,log_heart))->heart
+#testing heart~swim
+pcor.test(heart[,3],heart[,2],heart[,1])->hcor
+CIcorr(0.05,hcor$estimate,1,length(heart[,3]))->heartconf
+
+###combined
+###COMBINED LIVER BRAIN HEART
+na.omit(cbind(log_heart,log_brain,log_liver,log_body,log_swim))->combined
+combined[,1]+combined[,2]+combined[,3]->combined_weights
+pcor.test(combined_weights,combined[,5],combined[,4])->ccor
+CIcorr(0.05,ccor$estimate,1,length(combined[,3]))->combinedconf
+
+
+
+#Make a plot of regression slopes
+c(liverconf[1],brainconf[1],heartconf[1],gonadconf[1],combinedconf[1])->lower
+c(liverconf[2],brainconf[2],heartconf[2],gonadconf[2],combinedconf[2])->upper
+c(lcor$estimate,bcor$estimate,hcor$estimate,gcor$estimate,ccor$estimate)->means
+c(1,2,3,4,5)->y
+
+plot(0,type='n',axes=FALSE,ann=FALSE)
+plot(means,y, new=FALSE, xlim=c(-1,1.))
+arrows(means,y,lower,y, angle=90)
+arrows(means,y,upper,y,angle=90)
+abline(v=0)
+
+```
+

@@ -1,0 +1,97 @@
+---
+title: "Checking_Toadfish"
+author: "Alex Dornburg"
+date: "8/19/2017"
+output: html_document
+---
+
+``````{r toads2_option3}
+dyn.load('/Library/Java/JavaVirtualMachines/jdk1.8.0_40.jdk/Contents/Home/jre/lib/server/libjvm.dylib')
+library(rJava)
+library(xlsx)
+library(Hmisc)
+read.xlsx(file="Data_Here", sheetIndex=1)->toads
+males <- subset(toads, M.F=="m")
+
+log(males$swim.weight)->swim
+log(males$gonad.weight)->gonad
+log(males$liver.weight)->liver
+log(males$brain.weight)->brain
+log(males$heart.weight)->heart
+log(males$weight.evi)->body
+log(males$heart.weight+males$brain.weight+males$liver.weight)->combined
+cbind(swim,gonad,liver,brain,heart,body,combined)->data2
+na.omit(data2)->noNAdata
+
+lm(cbind(noNAdata[,1],noNAdata[,2],noNAdata[,3],noNAdata[,4],noNAdata[,5],noNAdata[,7])~noNAdata[,6])->multi_var
+
+summary(multi_var)->sums
+resid(multi_var)->resids
+as.matrix(resids)->resids
+colnames(resids)<-c("swim","gonad","liver","brain","heart","combined")
+res2 <- cov(resids)
+res2
+cov2cor(res2)->correlations
+correlations
+rcorr(correlations)->coco
+
+library(corrplot)
+corrplot(correlations, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45)
+############################
+############################
+############################
+############################
+############################
+plot_coeffs <- function(mlr_model) {
+      coeffs <- coefficients(mlr_model)
+      mp <- barplot(coeffs, col="#3F97D0", xaxt='n', main="Regression Coefficients")
+      lablist <- names(coeffs)
+      text(mp, par("usr")[3], labels = lablist, srt = 45, adj = c(1.1,1.1), xpd = TRUE, cex=0.6)
+      return(coeffs)
+    }
+
+lm(noNAdata[,1]~noNAdata[,6])->swimmod
+lm(noNAdata[,2]~noNAdata[,6])->gonadmod
+lm(noNAdata[,3]~noNAdata[,6])->livermod
+lm(noNAdata[,4]~noNAdata[,6])->brainmod
+lm(noNAdata[,5]~noNAdata[,6])->heartmod
+lm(noNAdata[,7]~noNAdata[,6])->combinedmod
+
+###Gonad
+gonadres2 <- cov(cbind(resid(swimmod),resid(gonadmod)))
+cov2cor(gonadres2)->gonadcorrelations
+gonadcorrelations
+##Compare with above approach
+correlations[2,1]
+
+###Liver
+liverres2 <- cov(cbind(resid(swimmod),resid(livermod)))
+cov2cor(liverres2)->livermodcorrelations
+livermodcorrelations
+##Compare with above approach
+correlations[3,1]
+
+###Brain
+brainmodres2 <- cov(cbind(resid(swimmod),resid(brainmod)))
+cov2cor(brainmodres2)->brainmodcorrelations
+brainmodcorrelations
+##Compare with above approach
+correlations[4,1]
+
+
+###Heart
+heartmodres2 <- cov(cbind(resid(swimmod),resid(heartmod)))
+cov2cor(heartmodres2)->heartmodcorrelations
+heartmodcorrelations
+##Compare with above approach
+correlations[5,1]
+
+###Combined
+combinedmodres2 <- cov(cbind(resid(swimmod),resid(combinedmod)))
+cov2cor(combinedmodres2)->combinedmodcorrelations
+combinedmodcorrelations
+##Compare with above approach
+correlations[6,1]
+```
+
+
